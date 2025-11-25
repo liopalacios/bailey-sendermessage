@@ -1,0 +1,14 @@
+# Dependencias de Node
+/node_modules
+
+# Logs y Archivos Temporales
+npm-debug.log*
+.DS_Store
+.env
+
+# Archivos de Sesión de WhatsApp (Baileys)
+# Estos contienen las credenciales de la sesión y son específicos del servidor.
+# ¡NUNCA deben subirse al repositorio!
+/baileys_auth_info_multi_db
+/session
+/auth_info_baileys
