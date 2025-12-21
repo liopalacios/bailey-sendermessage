@@ -19,6 +19,8 @@ const logger = pino({ level: 'silent' });
 
 // Crear carpeta para almacenar sesión
 const authFolder = path.join(__dirname, 'auth_info');
+const AUTH_FOLDER = path.resolve('./auth_info')
+
 if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder);
 }
@@ -152,10 +154,17 @@ app.post('/restart', async (req, res) => {
     try {
         console.log('🔄 Reiniciando conexión...');
         if (sock) {
+            await sock.logout().catch(() => {})
             sock.end();
+            sock = null;
+        }
+        // 2️⃣ Eliminar carpeta auth_info (sesión)
+        if (fs.existsSync(AUTH_FOLDER)) {
+            console.log('🧹 Eliminando carpeta auth_info...')
+            fs.rmSync(AUTH_FOLDER, { recursive: true, force: true })
         }
         reconnectAttempts = 0;
-        setTimeout(() => connectToWhatsApp(), 2000);
+        setTimeout(() => connectToWhatsApp(), 3000);
         res.json({ success: true, message: 'Reiniciando conexión' });
     } catch (error) {
         res.status(500).json({ error: error.message });
