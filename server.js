@@ -7,6 +7,7 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
+const axios = require('axios');
 
 let sock = null;
 let isConnected = false;
@@ -102,11 +103,52 @@ async function connectToWhatsApp() {
 
         // Manejar mensajes entrantes (opcional)
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            if (type === 'notify') {
-                for (const msg of messages) {
-                    if (!msg.key.fromMe && msg.message) {
-                        console.log('📨 Mensaje recibido de:', msg.key.remoteJid);
-                    }
+            if (type !== 'notify') return;
+
+            for (const msg of messages) {
+                if (!msg.message || msg.key.fromMe) continue;
+
+                const remoteJid = msg.key.remoteJid;
+                const isGroup = remoteJid.endsWith('@g.us');
+                const sender = isGroup ? msg.key.participant : remoteJid;
+
+                // Texto plano
+                const text =
+                    msg.message.conversation ??
+                    msg.message.extendedTextMessage?.text ??
+                    msg.message.imageMessage?.caption ??
+                    msg.message.videoMessage?.caption ??
+                    null;
+
+                if (!text) continue;
+
+                console.log(`📨 ${sender}: ${text}`);
+
+                try {
+                    // 👉 Enviar mensaje a Python
+                    /*const response = await axios.post(
+                        'http://localhost:8000/whatsapp/incoming',
+                        {
+                            text,
+                            sender,
+                            chat_id: remoteJid,
+                            is_group: isGroup,
+                            timestamp: Date.now()
+                        },
+                        { timeout: 30000 }
+                    );
+                    console.log('🔄 Mensaje enviado a Python, esperando respuesta...');
+                    console.log('Respuesta de Python:', response.data);*/
+                    // 👉 Si Python devuelve respuesta → enviarla a WhatsApp
+                    /*if (response.data?.reply) {
+                        console.log(`📤 Enviando respuesta a ${remoteJid}: ${response.data.reply}`);
+                        await sock.sendMessage(remoteJid, {
+                            text: response.data.reply
+                        });
+                    }*/
+
+                } catch (error) {
+                    console.error('❌ Error comunicando con Python:', error.message);
                 }
             }
         });
@@ -307,6 +349,88 @@ app.post('/send-bulk', async (req, res) => {
     }
 });
 
+// Endpoint para enviar mensajes individuales
+app.post('/send', async (req, res) => {
+    try {
+        if (!isConnected) {
+            return res.status(503).json({ 
+                status: 'error',
+                message: 'WhatsApp no está conectado. Por favor, escanea el QR.',
+                details: null 
+            });
+        }
+
+        const { message, contacto } = req.body;
+        
+        if (!contacto?.numero || !message) {
+            return res.status(400).json({ 
+                status: 'error',
+                message: 'Parámetros requeridos no válidos. Se espera message y contacto (objeto con numero y nombre).',
+                example: {
+                    message: 'Hola #NOMBRE#, tu código es 123.',
+                    contacto: { numero: '987654321', nombre: 'Juan' }
+                }
+            });
+        }
+
+        
+        
+        console.log(`📤 Iniciando envío a ${contacto.numero} ...`);
+        
+        // 2. PERSONALIZACIÓN DEL MENSAJE
+        // Reemplazar el placeholder #NOMBRE# con el nombre real del contacto
+        // Se usa una expresión regular global (/g) para reemplazar todas las ocurrencias.
+        const name = contacto.nombre || 'Cliente';
+        const personalizedMessage = message.replace(/#NOMBRE#/g, name);
+        
+        
+        let formattedNumber = contacto.numero.replace(/\D/g, '');
+
+        if (formattedNumber.length === 9) {
+            formattedNumber = '51' + formattedNumber;
+        }
+            if (!/^51\d{9}$/.test(formattedNumber)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Número inválido después de validación'
+            });
+        }
+        formattedNumber = formattedNumber.includes('@s.whatsapp.net') 
+            ? formattedNumber 
+            : `${formattedNumber}@s.whatsapp.net`;
+
+        if (!formattedNumber) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Número inválido después de validación'
+            });
+        }
+        // 3. ENVIAR MENSAJE PERSONALIZADO
+        await sock.sendMessage(formattedNumber, { text: personalizedMessage });
+        
+        console.log(`✅ [${now()}] Mensaje enviado a ${name} (${contacto.numero})`);
+
+        return res.json({
+            success: true,
+            number: contacto.numero,
+            nameUsed: name,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error(`❌ Error al enviar mensaje a ${req.body?.contacto?.numero}:`, error.message);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al enviar mensaje',
+            details: error.message
+        });
+    }
+        
+});
+function now() {
+    return new Date().toLocaleTimeString('es-PE', {
+        hour12: false
+    });
+}
 // Endpoint para cerrar sesión y limpiar
 app.post('/logout', async (req, res) => {
     try {
