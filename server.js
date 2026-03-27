@@ -126,7 +126,7 @@ async function connectToWhatsApp() {
 
                 try {
                     // 👉 Enviar mensaje a Python
-                    /*const response = await axios.post(
+                    const response = await axios.post(
                         'http://localhost:8000/whatsapp/incoming',
                         {
                             text,
@@ -138,14 +138,14 @@ async function connectToWhatsApp() {
                         { timeout: 30000 }
                     );
                     console.log('🔄 Mensaje enviado a Python, esperando respuesta...');
-                    console.log('Respuesta de Python:', response.data);*/
+                    console.log('Respuesta de Python:', response.data);
                     // 👉 Si Python devuelve respuesta → enviarla a WhatsApp
-                    /*if (response.data?.reply) {
+                    if (response.data?.reply) {
                         console.log(`📤 Enviando respuesta a ${remoteJid}: ${response.data.reply}`);
                         await sock.sendMessage(remoteJid, {
                             text: response.data.reply
                         });
-                    }*/
+                    }
 
                 } catch (error) {
                     console.error('❌ Error comunicando con Python:', error.message);
